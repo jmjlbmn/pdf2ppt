@@ -1,0 +1,4 @@
+Manifest-Version: 1.0
+Built-By: Maning
+Main-Class: vip.maning.pdf2ppt.App
+
