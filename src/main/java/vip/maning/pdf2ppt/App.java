@@ -122,7 +122,7 @@ public class App extends Application {
                     XSLFPictureShape shape = ppt.createSlide().createPicture(ppt.addPicture(new ByteArrayInputStream(bs.toByteArray()), PictureData.PictureType.PNG));
                     shape.setAnchor(new java.awt.Rectangle(0, 0, 720, 540));
                 }
-                ppt.write(new FileOutputStream(pdfFile.getParent() + pdfFile.getName() + " 转换的PPT文件.pptx"));
+                ppt.write(new FileOutputStream(pdfFile.getParent() + File.separatorChar + pdfFile.getName() + "转换的PPT文件.pptx"));
                 Platform.runLater(this::turnStop);
             } catch (Exception e) {
                 e.printStackTrace();
