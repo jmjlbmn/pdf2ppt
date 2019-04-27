@@ -1,137 +1,92 @@
 package vip.maning.pdf2ppt;
 
-import javafx.application.Application;
-import javafx.application.Platform;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
-import javafx.scene.Scene;
-import javafx.scene.control.ProgressBar;
-import javafx.scene.control.Tooltip;
-import javafx.scene.image.Image;
-import javafx.scene.input.Dragboard;
-import javafx.scene.input.TransferMode;
-import javafx.scene.layout.VBox;
-import javafx.scene.paint.Color;
-import javafx.scene.shape.Rectangle;
-import javafx.scene.text.Font;
-import javafx.scene.text.Text;
-import javafx.stage.Stage;
-import net.coobird.thumbnailator.Thumbnails;
+import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.poi.sl.usermodel.PictureData;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFPictureShape;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.io.IOException;
 
 /**
  * @author Maning
  */
-public class App extends Application {
-    private Rectangle rectangle;
-    private ProgressBar progress;
-    private boolean start = false;
-    private Stage stage;
-    private ExecutorService pool = Executors.newSingleThreadExecutor();
+public class App {
+    public static void main(String[] args) throws IOException {
+        File pdfFile = new File("D:/1.pdf");
+        PDDocument pdf = PDDocument.load(pdfFile);
+        XMLSlideShow ppt = new XMLSlideShow();
+        // 可选设置ppt大小,默认720*540
+        // ppt.setPageSize(new Dimension(1280, 720));
 
-    public static void main(String[] args) {
-        App.launch(args);
+        // 将pdf渲染成图片再进行转换,兼容性更好
+        turnAsImg(pdf, ppt);
+        // 纯扫描pdf转换,直接取出原图进行转换,质量更好,非扫描pdf会丢失文字内容
+        // turnOnlyImg(pdf, ppt);
+        // 提取图片
+        // extractImg("D:/1.pdf");
+
+        ppt.write(new FileOutputStream(pdfFile.getParent() + File.separatorChar + pdfFile.getName() + "转换的PPT文件.pptx"));
     }
 
-    @Override
-    public void start(Stage stage) throws Exception {
-        Text text = new Text("拖放文件到此处");
-        text.setFont(new Font(24));
-        rectangle = new Rectangle(450, 180, Color.TRANSPARENT);
-        rectangle.setStroke(Color.rgb(238, 130, 238));
-        progress = new ProgressBar();
-        progress.setMaxWidth(400);
-        progress.setVisible(false);
-        this.stage = stage;
-        VBox root = new VBox();
-        root.setPadding(new Insets(10));
-        root.setSpacing(10);
-        root.setAlignment(Pos.CENTER);
-        root.getChildren().add(text);
-        rectangle.setOnDragOver(event -> {
-            if (!start) {
-                event.acceptTransferModes(TransferMode.ANY);
-                rectangle.setFill(Color.rgb(255, 0, 0, 0.4));
+    private static void turnAsImg(PDDocument pdf, XMLSlideShow ppt) throws IOException {
+        PDFRenderer render = new PDFRenderer(pdf);
+        int count = pdf.getNumberOfPages();
+        for (int i = 0; i < count; i++) {
+            imgInsertPdf(ppt, render.renderImageWithDPI(i, 96, ImageType.RGB));
+        }
+    }
+
+    private static void turnOnlyImg(PDDocument pdf, XMLSlideShow ppt) throws IOException {
+        for (PDPage page : pdf.getPages()) {
+            PDResources resources = page.getResources();
+            for (COSName cos : resources.getXObjectNames()) {
+                if (resources.isImageXObject(cos)) {
+                    PDImageXObject obj = (PDImageXObject) resources.getXObject(cos);
+                    imgInsertPdf(ppt, obj.getImage());
+                }
+
             }
-        });
-        rectangle.setOnDragExited(event -> {
-            rectangle.setFill(Color.TRANSPARENT);
-        });
-        rectangle.setOnDragDropped(event -> {
-            if (!start) {
-                Dragboard dragboard = event.getDragboard();
-                if (dragboard.hasFiles()) {
-                    File file = dragboard.getFiles().get(0);
-                    if (file.getName().toLowerCase().endsWith("pdf")) {
-                        turnStart();
-                        doTurn(file);
+        }
+    }
+
+    private static void imgInsertPdf(XMLSlideShow ppt, BufferedImage img) throws IOException {
+        ByteArrayOutputStream bs = new ByteArrayOutputStream();
+        ImageIO.write(img, "jpg", bs);
+        XSLFPictureShape shape = ppt.createSlide().createPicture(ppt.addPicture(new ByteArrayInputStream(bs.toByteArray()), PictureData.PictureType.JPEG));
+        shape.setAnchor(new Rectangle(0, 0, ppt.getPageSize().width, ppt.getPageSize().height));
+    }
+
+    private static void extractImg(String pdfPath) throws IOException {
+        File pdfFile = new File(pdfPath);
+        File dir = new File(pdfFile.getParent() + File.separatorChar + pdfFile.getName() + "提取的图片文件");
+        if (dir.mkdirs()) {
+            PDDocument pdf = PDDocument.load(pdfFile);
+            int index = 1;
+            for (PDPage page : pdf.getPages()) {
+                PDResources resources = page.getResources();
+                for (COSName cos : resources.getXObjectNames()) {
+                    if (resources.isImageXObject(cos)) {
+                        PDImageXObject obj = (PDImageXObject) resources.getXObject(cos);
+                        ImageIO.write(obj.getImage(), "jpg", new File(dir.getPath() + File.separatorChar + index++ + ".jpg"));
                     }
+
                 }
             }
-        });
-        root.getChildren().add(rectangle);
-        root.getChildren().add(progress);
-        Scene scene = new Scene(root, 521, 258);
-        stage.setOpacity(0.8);
-        stage.setMaximized(false);
-        stage.getIcons().add(new Image(getClass().getResourceAsStream("/icon.png")));
-        stage.setTitle("PDF to PPT");
-        stage.setScene(scene);
-        stage.setResizable(false);
-        stage.show();
-        stage.setOnCloseRequest(e -> pool.shutdownNow());
+        }
+
     }
 
-    private void turnStart() {
-        this.start = true;
-        progress.setVisible(true);
-        progress.setProgress(0);
-    }
-
-    private void turnStop() {
-        this.start = false;
-        progress.setVisible(false);
-    }
-
-    private void doTurn(File pdfFile) {
-        pool.submit(() -> {
-            try {
-                PDDocument document = PDDocument.load(pdfFile);
-                PDFRenderer render = new PDFRenderer(document);
-                XMLSlideShow ppt = new XMLSlideShow();
-                int count = document.getNumberOfPages();
-                for (int i = 0; i < count; i++) {
-                    double jd = (i + 1) / (double) count;
-                    Platform.runLater(() -> {
-                        progress.setProgress(jd);
-                    });
-                    ByteArrayOutputStream bs = new ByteArrayOutputStream();
-                    Thumbnails.of(render.renderImage(i, 3, ImageType.ARGB)).size(1440, 1080).outputQuality(1).outputFormat("png").toOutputStream(bs);
-                    XSLFPictureShape shape = ppt.createSlide().createPicture(ppt.addPicture(new ByteArrayInputStream(bs.toByteArray()), PictureData.PictureType.PNG));
-                    shape.setAnchor(new java.awt.Rectangle(0, 0, 720, 540));
-                }
-                ppt.write(new FileOutputStream(pdfFile.getParent() + File.separatorChar + pdfFile.getName() + "转换的PPT文件.pptx"));
-                Platform.runLater(this::turnStop);
-            } catch (Exception e) {
-                e.printStackTrace();
-                Platform.runLater(() -> {
-                    turnStop();
-                    Tooltip tooltip = new Tooltip("转换失败" + e.getMessage());
-                    tooltip.show(stage);
-                });
-            }
-        });
-    }
 }
